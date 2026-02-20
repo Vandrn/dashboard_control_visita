@@ -245,44 +245,42 @@
                                 ->format('d/m/Y H:i') }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            @if(isset($visita['puntuacion_general']) && $visita['puntuacion_general'])
                             @php
-                            $puntuacion = floatval($visita['puntuacion_general']);
-                            $colorClass = $puntuacion >= 0.8 ? 'text-green-500' : ($puntuacion >= 0.6 ? 'text-yellow-500' : 'text-red-500');
+                                $estrellas = isset($visita['estrellas']) ? floatval($visita['estrellas']) : null;
+                                $colorClass = $estrellas === null ? 'text-gray-400'
+                                    : ($estrellas >= 4 ? 'text-green-500' : ($estrellas >= 3 ? 'text-yellow-500' : 'text-red-500'));
                             @endphp
-                            <div class="flex items-center">
-                                <div class="flex {{ $colorClass }}">
-                                    @for($i = 1; $i <= 5; $i++)
-                                        @if($i <=round($puntuacion * 5))
-                                        ⭐
-                                        @else
-                                        ☆
-                                        @endif
-                                    @endfor
+                        
+                            @if($estrellas !== null && $estrellas > 0)
+                                <div class="flex items-center">
+                                    <div class="flex {{ $colorClass }}">
+                                        @for($i = 1; $i <= 5; $i++)
+                                            @if($i <= round($estrellas))
+                                                ⭐
+                                            @else
+                                                ☆
+                                            @endif
+                                        @endfor
+                                    </div>
+                                    <span class="ml-2 text-sm {{ $colorClass }}">
+                                        {{ number_format($estrellas, 1) }}
+                                    </span>
                                 </div>
-                                <span class="ml-2 text-sm {{ $colorClass }}">
-                                    {{ number_format($puntuacion * 5, 1) }}
-                                </span>
-                            </div>
                             @else
-                            <span class="text-gray-400">N/A</span>
+                                <span class="text-gray-400">N/A</span>
                             @endif
                         </td>
+
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             @php
-                            $totalImagenes = 0;
-                            if (is_array($visita['imagenes'] ?? [])) {
-                                foreach ($visita['imagenes'] as $seccion) {
-                                    if (isset($seccion['imagenes']) && is_array($seccion['imagenes'])) {
-                                        $totalImagenes += count($seccion['imagenes']);
-                                    }
-                                }
-                            }
+                                $totalImagenes = isset($visita['total_imagenes']) ? (int)$visita['total_imagenes'] : 0;
                             @endphp
+                        
                             <span class="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
                                 {{ $totalImagenes }}
                             </span>
                         </td>
+
                         <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div class="flex justify-end space-x-2">
                                 <a href="{{ route('admin.visita.show', $visita['id']) }}"

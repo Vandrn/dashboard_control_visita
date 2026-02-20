@@ -5,6 +5,7 @@ namespace App\Models;
 use Google\Cloud\BigQuery\BigQueryClient;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class Usuario
 {
@@ -17,42 +18,45 @@ class Usuario
     // Tabla principal de visitas
     protected $visitasTable = 'GR_nuevo';
 
-
     public function __construct()
     {
         $this->bigQuery = new BigQueryClient([
             'projectId' => config('admin.bigquery.project_id'),
             'keyFilePath' => storage_path('app' . config('admin.bigquery.key_file')),
         ]);
-    
+
         $this->visitasTable = 'GR_nuevo';
-    
+
         Log::info('✅ Tabla de visitas usada: ' . $this->visitasTable);
     }
-
 
     /**
      * Buscar usuario por email
      */
     public function findByEmail($email)
     {
-        $query = sprintf(
-            'SELECT id, nombre, email, password_hash, rol, activo, pais_acceso, created_at, updated_at FROM `%s.%s.%s` WHERE email = @email LIMIT 1',
-            $this->projectId,
-            $this->dataset,
-            $this->table
-        );
+        $key = 'user_by_email:' . strtolower(trim($email));
 
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters(['email' => $email]);
+        return Cache::remember($key, now()->addMinutes(10), function () use ($email) {
+            $query = sprintf(
+                'SELECT id, nombre, email, password_hash, rol, activo, pais_acceso
+                 FROM `%s.%s.%s`
+                 WHERE email = @email
+                 LIMIT 1',
+                $this->projectId,
+                $this->dataset,
+                $this->table
+            );
 
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $job = $this->bigQuery->query($query)->parameters(['email' => $email]);
+            $results = $this->bigQuery->runQuery($job);
 
-        foreach ($results->rows() as $row) {
-            return (array) $row;
-        }
+            foreach ($results->rows() as $row) {
+                return (array) $row;
+            }
 
-        return null;
+            return null;
+        });
     }
 
     /**
@@ -143,6 +147,7 @@ class Usuario
 
         return $insertResponse->isSuccessful();
     }
+
     /**
      * Obtener estadísticas generales de visitas
      */
@@ -157,15 +162,15 @@ class Usuario
         $whereClause = $this->buildWhereClause($filtros, $userData, $params);
 
         $query = sprintf(
-            'SELECT 
-            COUNT(*) as total_visitas,
-            COUNT(DISTINCT pais) as total_paises,
-            COUNT(DISTINCT zona) as total_zonas,
-            COUNT(DISTINCT tienda) as total_tiendas,
-            COUNT(DISTINCT correo_realizo) as total_evaluadores,
-            DATE(MIN(fecha_hora_inicio)) as fecha_primera_visita,
-            DATE(MAX(fecha_hora_fin)) as fecha_ultima_visita
-        FROM `%s.%s.%s` %s',
+            'SELECT
+                COUNT(*) as total_visitas,
+                COUNT(DISTINCT pais) as total_paises,
+                COUNT(DISTINCT zona) as total_zonas,
+                COUNT(DISTINCT tienda) as total_tiendas,
+                COUNT(DISTINCT correo_realizo) as total_evaluadores,
+                DATE(MIN(fecha_hora_inicio)) as fecha_primera_visita,
+                DATE(MAX(fecha_hora_fin)) as fecha_ultima_visita
+            FROM `%s.%s.%s` %s',
             $this->projectId,
             $this->dataset,
             $this->visitasTable,
@@ -174,6 +179,7 @@ class Usuario
 
         $queryJobConfig = $this->bigQuery->query($query)
             ->parameters($params);
+
         $results = $this->bigQuery->runQuery($queryJobConfig);
 
         foreach ($results->rows() as $row) {
@@ -191,75 +197,37 @@ class Usuario
         ];
     }
 
-
-    /**
-     * Obtener visitas con paginación y filtros
-     */
     public function getVisitasPaginadas($filtros = [], $page = 1, $perPage = 20, $userData = null)
     {
         $params = [];
         $whereClause = $this->buildWhereClause($filtros, $userData, $params);
         $offset = ($page - 1) * $perPage;
-
+    
         $query = sprintf(
-            'SELECT 
-            v.id,
-            v.fecha_hora_inicio,
-            v.correo_realizo,
-            v.lider_zona,
-            v.pais,
-            v.zona,
-            v.tienda,
-            v.ubicacion,
-
-            -- Promedio general de todas las respuestas numéricas
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_general,
-
-            -- Promedio por sección específica
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE s.nombre_seccion = "Operaciones" AND SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_operaciones,
-
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE s.nombre_seccion = "Administración" AND SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_administracion,
-
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE s.nombre_seccion = "Producto" AND SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_producto,
-
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE s.nombre_seccion = "Personal" AND SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_personal,
-
-            (
-              SELECT AVG(CAST(p.respuesta AS FLOAT64))
-              FROM UNNEST(v.secciones) AS s,
-                   UNNEST(s.preguntas) AS p
-              WHERE s.nombre_seccion = "KPIs" AND SAFE_CAST(p.respuesta AS FLOAT64) IS NOT NULL
-            ) AS puntuacion_kpis
-
-        FROM `%s.%s.%s` v
-        %s
-        ORDER BY v.fecha_hora_inicio DESC
-        LIMIT %d OFFSET %d',
+            'SELECT
+                v.id,
+                v.fecha_hora_inicio,
+                v.correo_realizo,
+                v.lider_zona,
+                v.pais,
+                v.zona,
+                v.tienda,
+                v.ubicacion,
+    
+                v.puntos_totales,
+                v.estrellas,
+    
+                -- ✅ TOTAL de imágenes (sin traer todo el JSON)
+                (
+                  SELECT IFNULL(SUM(ARRAY_LENGTH(p.imagenes)), 0)
+                  FROM UNNEST(v.secciones) s
+                  JOIN UNNEST(s.preguntas) p
+                ) AS total_imagenes
+    
+            FROM `%s.%s.%s` v
+            %s
+            ORDER BY v.fecha_hora_inicio DESC
+            LIMIT %d OFFSET %d',
             $this->projectId,
             $this->dataset,
             $this->visitasTable,
@@ -267,19 +235,17 @@ class Usuario
             $perPage,
             $offset
         );
-
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters($params);
+    
+        $queryJobConfig = $this->bigQuery->query($query)->parameters($params);
         $results = $this->bigQuery->runQuery($queryJobConfig);
-
+    
         $visitas = [];
         foreach ($results->rows() as $row) {
             $visitas[] = (array) $row;
         }
-
+    
         return $visitas;
     }
-
 
     /**
      * Obtener países disponibles según permisos del usuario
@@ -294,6 +260,7 @@ class Usuario
         );
 
         $params = [];
+
         // Si es evaluador_pais, filtrar solo su país
         if (
             $userData && $userData['rol'] === 'evaluador_pais' &&
@@ -307,6 +274,7 @@ class Usuario
 
         $queryJobConfig = $this->bigQuery->query($query)
             ->parameters($params);
+
         $results = $this->bigQuery->runQuery($queryJobConfig);
 
         $paises = [];
@@ -324,9 +292,9 @@ class Usuario
     {
         $query = sprintf(
             'SELECT DISTINCT correo_realizo, lider_zona
-            FROM `%s.%s.%s`
-            WHERE correo_realizo IS NOT NULL
-            ORDER BY correo_realizo',
+             FROM `%s.%s.%s`
+             WHERE correo_realizo IS NOT NULL
+             ORDER BY correo_realizo',
             $this->projectId,
             $this->dataset,
             $this->visitasTable
@@ -365,10 +333,8 @@ class Usuario
 
         // Filtro automático por país para evaluador_pais
         if (
-            $userData &&
-            $userData['rol'] === 'evaluador_pais' &&
-            isset($userData['pais_acceso']) &&
-            $userData['pais_acceso'] !== 'ALL'
+            $userData && $userData['rol'] === 'evaluador_pais' &&
+            isset($userData['pais_acceso']) && $userData['pais_acceso'] !== 'ALL'
         ) {
             $conditions[] = 'pais = @pais_acceso';
             $params['pais_acceso'] = $this->sanitize($userData['pais_acceso']);
@@ -379,18 +345,22 @@ class Usuario
             $conditions[] = 'DATE(fecha_hora_inicio) >= @fecha_inicio';
             $params['fecha_inicio'] = $filtros['fecha_inicio'];
         }
+
         if (!empty($filtros['fecha_fin']) && $this->validarFecha($filtros['fecha_fin'])) {
             $conditions[] = 'DATE(fecha_hora_inicio) <= @fecha_fin';
             $params['fecha_fin'] = $filtros['fecha_fin'];
         }
+
         if (!empty($filtros['pais'])) {
             $conditions[] = 'pais = @pais';
             $params['pais'] = $this->sanitize($filtros['pais']);
         }
+
         if (!empty($filtros['tienda'])) {
             $conditions[] = 'tienda LIKE @tienda';
             $params['tienda'] = '%' . $this->sanitize($filtros['tienda']) . '%';
         }
+
         if (!empty($filtros['evaluador'])) {
             $conditions[] = 'correo_realizo = @evaluador';
             $params['evaluador'] = $this->sanitize($filtros['evaluador']);
@@ -433,6 +403,7 @@ class Usuario
 
         $queryJobConfig = $this->bigQuery->query($query)
             ->parameters($params);
+
         $results = $this->bigQuery->runQuery($queryJobConfig);
 
         foreach ($results->rows() as $row) {
@@ -447,29 +418,25 @@ class Usuario
      */
     public function getVisitaCompleta($id, $userRole = null, $userEmail = null)
     {
-        // Construir query base
-        $query = sprintf(
-            'SELECT concat(gr.pais,left(gr.tienda,3)) BV_PAIS_TIENDA, a.GEO as TIENDA_COORDENADAS, gr.*
-    FROM `%s.%s.%s` gr
-    LEFT JOIN (
-        SELECT concat(dsm.LATITUD,",",replace(dsm.LONGITUD,"\'","")) GEO, dsm.PAIS_TIENDA
-        FROM `%s.bi_lab.dim_store_master` dsm
-        WHERE dsm.LATITUD NOT IN ("nan")
-    ) a ON concat(gr.pais,left(gr.tienda,3)) = a.PAIS_TIENDA
-    WHERE gr.id = @id',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable,
-            $this->projectId
-        );
-        // Si es evaluador, verificar que solo vea sus visitas
+        $query = '
+            SELECT
+                gr.*,
+                CONCAT(CAST(g.LATITUD AS STRING), ",", CAST(g.LONGITUD AS STRING)) AS TIENDA_COORDENADAS
+            FROM `adoc-bi-dev.OPB.GR_nuevo` gr
+            LEFT JOIN `adoc-bi-prd.BI_Repo_Qlik.DIM_GEOLOCALIZACION` g
+              ON g.LAND1 = gr.pais
+             AND g.SORT1 = REGEXP_EXTRACT(gr.tienda, r"^([A-Z0-9]{3})")
+            WHERE gr.id = @id
+        ';
+
         if ($userRole === 'evaluador' && $userEmail) {
-            $query .= ' AND correo_realizo = @user_email';
+            $query .= ' AND gr.correo_realizo = @user_email';
         }
 
         $query .= ' LIMIT 1';
 
         $parameters = ['id' => $id];
+
         if ($userRole === 'evaluador' && $userEmail) {
             $parameters['user_email'] = $userEmail;
         }
@@ -483,7 +450,6 @@ class Usuario
 
         return null;
     }
-
 
     /**
      * Obtener URLs de imágenes de una visita
@@ -523,7 +489,6 @@ class Usuario
         return $imagenes;
     }
 
-
     /**
      * Procesar y estructurar datos de la visita para display
      */
@@ -553,6 +518,7 @@ class Usuario
 
             foreach ($seccion['preguntas'] as $pregunta) {
                 $codigo = $pregunta['codigo_pregunta'];
+
                 $preguntas[$codigo] = [
                     'codigo_pregunta' => $codigo,
                     'respuesta' => $pregunta['respuesta'],
@@ -575,9 +541,11 @@ class Usuario
         // Reorganizar KPIs (si los usás)
         if (isset($visita['kpis'])) {
             $kpiPreguntas = [];
+
             foreach ($visita['kpis'] as $kpi) {
                 $kpiPreguntas[$kpi['codigo_pregunta']] = $kpi['valor'];
             }
+
             $resultado['kpis'] = [
                 'preguntas' => $kpiPreguntas
             ];
@@ -602,7 +570,6 @@ class Usuario
     public function calcularPuntuaciones($visita)
     {
         $secciones = ['operaciones', 'administracion', 'producto', 'personal'];
-
         $resultados = [];
 
         foreach ($secciones as $seccion) {
@@ -616,6 +583,7 @@ class Usuario
 
             foreach ($preguntas as $pregunta) {
                 $respuesta = $pregunta['respuesta'] ?? null;
+
                 if (is_numeric($respuesta)) {
                     $suma += floatval($respuesta); // ya deberían venir normalizadas (0.2 a 1)
                     $conteo++;
@@ -624,6 +592,7 @@ class Usuario
 
             if ($conteo > 0) {
                 $promedio = $suma / $conteo;
+
                 $resultados[$seccion] = [
                     'promedio' => $promedio,
                     'porcentaje' => $promedio * 100,
@@ -677,7 +646,6 @@ class Usuario
     public function calcularDistancia($lat1, $lng1, $lat2, $lng2)
     {
         $radioTierra = 6371000; // Radio de la Tierra en metros
-
         $dLat = deg2rad($lat2 - $lat1);
         $dLng = deg2rad($lng2 - $lng1);
 
@@ -714,11 +682,11 @@ class Usuario
         // Si falta usuario o tienda => retornar error, pero incluir tienda
         if (!$ubicacionUsuario || !$coordenadasTienda || !$coordsTienda) {
             return [
-                'valida'        => false,
-                'distancia'     => null,
-                'mensaje'       => '⚠️ No se encontraron coordenadas de usuario para validar',
-                'estado'        => 'sin_datos',
-                'coords_usuario'=> null,
+                'valida' => false,
+                'distancia' => null,
+                'mensaje' => '⚠️ No se encontraron coordenadas de usuario para validar',
+                'estado' => 'sin_datos',
+                'coords_usuario' => null,
                 'coords_tienda' => $coordsTienda, // <- siempre se manda
             ];
         }
@@ -727,19 +695,19 @@ class Usuario
         $coordsUsuario = explode(',', $ubicacionUsuario);
         if (count($coordsUsuario) !== 2) {
             return [
-                'valida'        => false,
-                'distancia'     => null,
-                'mensaje'       => '⚠️ Formato de ubicación de usuario inválido',
-                'estado'        => 'error',
-                'coords_usuario'=> null,
+                'valida' => false,
+                'distancia' => null,
+                'mensaje' => '⚠️ Formato de ubicación de usuario inválido',
+                'estado' => 'error',
+                'coords_usuario' => null,
                 'coords_tienda' => $coordsTienda,
             ];
         }
 
         $latUsuario = floatval(trim($coordsUsuario[0]));
         $lngUsuario = floatval(trim($coordsUsuario[1]));
-        $latTienda  = $coordsTienda['lat'];
-        $lngTienda  = $coordsTienda['lng'];
+        $latTienda = $coordsTienda['lat'];
+        $lngTienda = $coordsTienda['lng'];
 
         // Calcular distancia
         $distancia = $this->calcularDistancia($latUsuario, $lngUsuario, $latTienda, $lngTienda);
@@ -748,17 +716,16 @@ class Usuario
         $esValida = $distanciaRedondeada <= 50;
 
         return [
-            'valida'        => $esValida,
-            'distancia'     => $distanciaRedondeada,
-            'mensaje'       => $esValida
+            'valida' => $esValida,
+            'distancia' => $distanciaRedondeada,
+            'mensaje' => $esValida
                 ? "✅ Visita válida: {$distanciaRedondeada} metros de la tienda"
                 : "❌ Visita sospechosa: {$distanciaRedondeada} metros de la tienda (muy lejos)",
-            'estado'        => $esValida ? 'valida' : 'invalida',
-            'coords_usuario'=> ['lat' => $latUsuario, 'lng' => $lngUsuario],
+            'estado' => $esValida ? 'valida' : 'invalida',
+            'coords_usuario' => ['lat' => $latUsuario, 'lng' => $lngUsuario],
             'coords_tienda' => $coordsTienda, // <- garantizado siempre
         ];
     }
-
 
     /**
      * 📍 Obtener validación de distancia para una visita específica
@@ -816,6 +783,7 @@ class Usuario
         );
 
         $params = [];
+
         // Si es evaluador_pais, filtrar solo su país
         if (
             $userData && $userData['rol'] === 'evaluador_pais' &&
@@ -829,6 +797,7 @@ class Usuario
 
         $queryJobConfig = $this->bigQuery->query($query)
             ->parameters($params);
+
         $results = $this->bigQuery->runQuery($queryJobConfig);
 
         $tiendas = [];

@@ -35,7 +35,7 @@
         @endforeach
     </div>
 
-    {{-- Observación KPI --}}
+    {{-- Observaci��n KPI --}}
     @php
     $obs = collect($kpis)->firstWhere('codigo_pregunta', 'OBS_KPI');
     @endphp

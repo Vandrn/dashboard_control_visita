@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Usuario;
-use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class DashboardController extends Controller
@@ -25,32 +25,31 @@ class DashboardController extends Controller
         try {
             // Obtener filtros de la sesión o request
             $filtros = $this->obtenerFiltros($request);
-
+            
             // Obtener estadísticas generales (con filtros de país aplicados)
             $user = session('admin_user');
             // Obtener estadísticas generales
             $estadisticas = $this->usuario->getEstadisticasVisitas($filtros, $user);
-
+            
             // Obtener visitas paginadas
             $page = $request->get('page', 1);
             $perPage = config('admin.pagination.per_page', 20);
             $visitas = $this->usuario->getVisitasPaginadas($filtros, $page, $perPage, $user);
             // Agregar conteo de imágenes a cada visita
-            foreach ($visitas as &$visita) {
+            /*foreach ($visitas as &$visita) {
                 $imagenes = $this->usuario->getImagenesVisita($visita['id'], $user['rol'] ?? null, $user['email'] ?? null);
                 $visita['imagenes'] = $imagenes;
                 $visita['total_imagenes'] = is_countable($imagenes) ? count($imagenes) : 0;
             }
-            unset($visita);
+            unset($visita);*/
             $totalVisitas = $this->usuario->contarVisitas($filtros, $user);
             $totalPages = ceil($totalVisitas / $perPage);
-
-            // Obtener datos para filtros
+            
             // Obtener datos para filtros (filtrados según permisos del usuario)
             $user = session('admin_user');
             $paises = $this->usuario->getPaisesDisponibles($user);
             $evaluadores = $this->usuario->getEvaluadoresDisponibles();
-
+            
             // Preparar datos de paginación
             $paginacion = [
                 'current_page' => $page,
@@ -62,15 +61,16 @@ class DashboardController extends Controller
 
             return view('admin.dashboard.index', compact(
                 'estadisticas',
-                'visitas',
+                'visitas', 
                 'paginacion',
                 'filtros',
                 'paises',
                 'evaluadores'
             ));
+
         } catch (\Exception $e) {
             Log::error('Error en dashboard: ' . $e->getMessage());
-
+            
             return view('admin.dashboard.index', [
                 'estadisticas' => [],
                 'visitas' => [],
@@ -109,7 +109,7 @@ class DashboardController extends Controller
             ]);
         } catch (\Exception $e) {
             Log::error('Error en getVisitas API: ' . $e->getMessage());
-
+            
             return response()->json([
                 'success' => false,
                 'error' => 'Error al obtener las visitas'
@@ -182,9 +182,6 @@ class DashboardController extends Controller
         // Guardar filtros en sesión
         session(['admin_dashboard_filtros' => $filtros]);
 
-        // Guardar filtros en sesión
-        session(['admin_dashboard_filtros' => $filtros]);
-
         // DEBUGGING TEMPORAL - REMOVER DESPUÉS
         if (config('app.debug')) {
             Log::info('Filtros procesados', [
@@ -205,8 +202,7 @@ class DashboardController extends Controller
     {
         session()->forget('admin_dashboard_filtros');
         return redirect()->route('admin.dashboard');
-    }
-
+    }    
     /**
      * Obtener países permitidos según rol del usuario
      */
@@ -214,16 +210,14 @@ class DashboardController extends Controller
     {
         try {
             $user = session('admin_user');
-            $paises = $this->usuario->getPaisesDisponibles($user);
-
+            $paises = $this->usuario->getPaisesDisponibles($user);            
             return response()->json([
                 'success' => true,
                 'paises' => $paises,
                 'restriccion' => $user['rol'] === 'evaluador_pais' ? $user['pais_acceso'] : null
-            ]);
+            ]);            
         } catch (\Exception $e) {
-            Log::error('Error al obtener países permitidos: ' . $e->getMessage());
-
+            Log::error('Error al obtener países permitidos: ' . $e->getMessage());            
             return response()->json([
                 'success' => false,
                 'error' => 'Error al obtener países'
@@ -238,20 +232,19 @@ class DashboardController extends Controller
     {
         try {
             $user = session('admin_user');
-            $tiendas = $this->usuario->getTiendasDisponibles($user);
-
+            $tiendas = $this->usuario->getTiendasDisponibles($user);            
             return response()->json([
                 'success' => true,
                 'tiendas' => $tiendas,
                 'total' => count($tiendas)
-            ]);
+            ]);            
         } catch (\Exception $e) {
-            Log::error('Error al obtener tiendas: ' . $e->getMessage());
-
+            Log::error('Error al obtener tiendas: ' . $e->getMessage());            
             return response()->json([
                 'success' => false,
                 'error' => 'Error al obtener las tiendas'
             ], 500);
         }
     }
-}
+
+    }

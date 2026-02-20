@@ -58,17 +58,14 @@
 
         $mostrar = false;
         if ($esObservacion) {
-        // Mostrar solo si hay observaciones o imágenes
         $mostrar = !empty($pregunta['observaciones']) || (isset($pregunta['imagenes']) && count($pregunta['imagenes']) > 0);
         } elseif (isset($preguntasConImagen[$codigoSeccion]) && in_array($codigoPregunta, $preguntasConImagen[$codigoSeccion])) {
-        // Mostrar aunque no tenga imágenes, para que se vea el mensaje de "no hay imágenes"
         $mostrar = true;
         }
         @endphp
 
         @if ($mostrar)
         <div class="mb-6">
-            {{-- Título --}}
             @if($esObservacion)
             <h3 class="text-lg font-semibold text-gray-700 mb-2">
                 Observaciones {{ $bloque['nombre_seccion'] ?? 'Sección' }}
@@ -77,7 +74,6 @@
             <h3 class="text-lg font-semibold text-gray-700 mb-2">{{ $pregunta['texto_pregunta'] }}</h3>
             @endif
 
-            {{-- Texto de observación --}}
             @php
             $textoObservacion = $pregunta['observaciones'] ?? $pregunta['respuesta'] ?? null;
             @endphp
@@ -88,7 +84,6 @@
             </p>
             @endif
 
-            {{-- Imágenes --}}
             @if(isset($pregunta['imagenes']) && is_array($pregunta['imagenes']) && count($pregunta['imagenes']) > 0)
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 @foreach($pregunta['imagenes'] as $index => $imagen)
@@ -112,7 +107,6 @@
                 @endforeach
             </div>
             @else
-            {{-- Sin imágenes --}}
             <p class="text-sm text-gray-400 italic">Sin imágenes</p>
             <div class="bg-white shadow rounded-lg p-12 text-center">
                 <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -133,39 +127,99 @@
     @endif
 </div>
 
-<!-- Modal para ver imagen en grande -->
-<div id="imageModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 hidden">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 lg:w-3/4 shadow-lg rounded-md bg-white">
-        <div class="flex items-center justify-between mb-4">
-            <h3 id="modalTitle" class="text-lg font-medium text-gray-900"></h3>
-            <button onclick="closeImageModal()" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-        <div class="text-center">
-            <img id="modalImage" src="" alt="" class="max-w-full max-h-96 mx-auto rounded-lg shadow">
-        </div>
-        <div id="modalObservations" class="mt-4 p-3 bg-gray-50 rounded hidden">
-            <strong class="text-sm text-gray-900">Observaciones:</strong>
-            <p id="modalObservationsText" class="text-sm text-gray-600 mt-1"></p>
-        </div>
-        <div class="mt-6 flex justify-center space-x-3">
-            <a id="modalDownload" href="" download
-                class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md">
-                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Descargar
-            </a>
-            <button onclick="closeImageModal()"
-                class="inline-flex items-center px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 text-sm font-medium rounded-md">
-                Cerrar
-            </button>
+<!-- Modal MEJORADO para ver imagen en GRANDE -->
+<div id="imageModal" class="fixed inset-0 bg-black bg-opacity-90 h-full w-full z-50 hidden flex items-center justify-center p-4">
+    <div class="relative w-full max-w-7xl mx-auto">
+        <!-- Botón cerrar flotante -->
+        <button onclick="closeImageModal()" class="absolute top-4 right-4 z-10 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-full p-2 transition-all">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        
+        <div class="bg-white rounded-lg shadow-2xl overflow-hidden">
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-blue-600 to-blue-800 px-6 py-4">
+                <h3 id="modalTitle" class="text-xl font-bold text-white"></h3>
+            </div>
+            
+            <!-- Imagen MUCHO MÁS GRANDE - 70-80% de la pantalla -->
+            <div class="bg-gray-100 p-4 flex items-center justify-center" style="min-height: 70vh; max-height: 80vh;">
+                <img id="modalImage" 
+                     src="" 
+                     alt="" 
+                     class="max-w-full max-h-full object-contain rounded-lg shadow-lg cursor-zoom-in"
+                     onclick="toggleFullscreen(this)">
+            </div>
+            
+            <!-- Observaciones -->
+            <div id="modalObservations" class="px-6 py-4 bg-blue-50 border-t border-blue-100 hidden">
+                <div class="flex items-start">
+                    <svg class="w-5 h-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                    </svg>
+                    <div>
+                        <strong class="text-sm font-semibold text-blue-900">Observaciones:</strong>
+                        <p id="modalObservationsText" class="text-sm text-blue-800 mt-1"></p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Botones de acción -->
+            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+                <button onclick="toggleFullscreen(document.getElementById('modalImage'))"
+                    class="inline-flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white text-sm font-medium rounded-md transition-colors">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                    </svg>
+                    Ver Pantalla Completa
+                </button>
+                
+                <div class="flex space-x-3">
+                    <a id="modalDownload" href="" download
+                        class="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-md transition-colors">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Descargar
+                    </a>
+                    <button onclick="closeImageModal()"
+                        class="inline-flex items-center px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 text-sm font-medium rounded-md transition-colors">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Cerrar
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+
+<style>
+    /* Estilos para el zoom de imagen */
+    .cursor-zoom-in {
+        cursor: zoom-in;
+    }
+    
+    .cursor-zoom-out {
+        cursor: zoom-out;
+    }
+    
+    .fullscreen-image {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        object-fit: contain !important;
+        z-index: 9999 !important;
+        background: black !important;
+        cursor: zoom-out !important;
+    }
+</style>
 @endsection
 
 @push('scripts')
@@ -180,7 +234,6 @@
 
         modalImage.src = url;
         modalDownload.href = url;
-        // Mostrar título solo para observaciones (ya viene preparado desde Blade como "Observaciones {Sección}")
         modalTitle.textContent = title;
 
         if (observations && observations.trim() !== '') {
@@ -196,8 +249,27 @@
 
     function closeImageModal() {
         const modal = document.getElementById('imageModal');
+        const modalImage = document.getElementById('modalImage');
+        
+        // Cerrar fullscreen si está activo
+        if (modalImage.classList.contains('fullscreen-image')) {
+            modalImage.classList.remove('fullscreen-image');
+        }
+        
         modal.classList.add('hidden');
         document.body.style.overflow = 'auto';
+    }
+
+    function toggleFullscreen(img) {
+        if (img.classList.contains('fullscreen-image')) {
+            img.classList.remove('fullscreen-image');
+            img.classList.add('cursor-zoom-in');
+            img.classList.remove('cursor-zoom-out');
+        } else {
+            img.classList.add('fullscreen-image');
+            img.classList.remove('cursor-zoom-in');
+            img.classList.add('cursor-zoom-out');
+        }
     }
 
     document.addEventListener('keydown', function(e) {

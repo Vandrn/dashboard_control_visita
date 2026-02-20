@@ -1,4 +1,4 @@
-{{-- 📍 Componente de Validación de Distancia --}}
+{{-- �9�9 Componente de Validaci��n de Distancia --}}
 @if(isset($validacionDistancia))
     <div class="distance-validation-container mb-4">
         <div class="card border-0 shadow-sm">
@@ -69,7 +69,7 @@
                     </div>
                 </div>
 
-                {{-- Información adicional para debugging (solo para admins) --}}
+                {{-- Informaci��n adicional para debugging (solo para admins) --}}
                 @php
                     $isAdmin = data_get(session('admin_user'), 'rol') === 'admin';
                 @endphp
@@ -86,7 +86,7 @@
         </div>
     </div>
 
-    {{-- Estilos específicos --}}
+    {{-- Estilos espec��ficos --}}
     <style>
         .distance-validation-container .distance-message {
             font-weight: 500;

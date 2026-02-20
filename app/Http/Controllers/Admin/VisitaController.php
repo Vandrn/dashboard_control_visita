@@ -9,6 +9,7 @@ use Google\Cloud\Storage\StorageClient; // AGREGAR ESTA LÍNEA AL INICIO
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon; // Asegúrate de tener Carbon importado
 
+
 class VisitaController extends Controller
 {
     protected $usuario;
@@ -33,14 +34,14 @@ class VisitaController extends Controller
                 $user['email']
             );
 
-            // Obtener KPIs de la visita
-            $kpis = $visitaRaw['kpis'] ?? [];
-
             if (!$visitaRaw) {
                 abort(404, 'Visita no encontrada o sin permisos para verla.');
             }
 
-            // AGREGAR VALIDACI�0�7N DE ACCESO POR PA�0�1S
+            // Obtener KPIs de la visita
+            $kpis = $visitaRaw['kpis'] ?? [];
+
+            // VALIDACIÓN DE ACCESO POR PAÍS
             if (!$this->validarAccesoPais($visitaRaw, $user)) {
                 abort(403, 'No tiene permisos para ver visitas de este país.');
             }
@@ -93,7 +94,7 @@ class VisitaController extends Controller
     }
 
     /**
-     * Mostrar galería de imágenes de una visita - VERSIÓN CORREGIDA CON TUS VARIABLES .env
+     * Mostrar galería de imágenes de una visita
      */
     public function imagenes($id)
     {
@@ -224,8 +225,7 @@ class VisitaController extends Controller
                 ], 404);
             }
 
-            // AGREGAR ESTA VALIDACI�0�7N:
-            // Validar acceso por pa��s
+            // Validar acceso por país
             if (!$this->validarAccesoPais($visitaRaw, $user)) {
                 return response()->json([
                     'success' => false,
@@ -237,7 +237,7 @@ class VisitaController extends Controller
             $puntuaciones = $this->usuario->calcularPuntuaciones($visita);
             $puntajesPorArea = $this->usuario->calcularPuntajesPorArea($visita);
 
-            // �9�9 AGREGAR VALIDACI�0�7N DE DISTANCIA PARA API
+            // AGREGAR VALIDACIÓN DE DISTANCIA PARA API
             $validacionDistancia = $this->usuario->getValidacionDistancia(
                 $id,
                 $user['rol'],
@@ -311,19 +311,18 @@ class VisitaController extends Controller
                 'PREG_03_09' => 'Todas las carteras tienen un alzador en las exhibiciones.',
             ],
             'personal' => [
-                'PREG_04_01' => 'Personal con imagen presentable, con su respectivo uniforme según política.',
-                'PREG_04_02' => 'Amabilidad en el recibimiento de los clientes.',
-                'PREG_04_03' => 'Cumplimiento de protocolos de bioseguridad.',
-                'PREG_04_04' => 'Disponibilidad del personal para ayudar durante el recorrido, selección y prueba de calzado.',
-                'PREG_04_05' => 'Nuestros ADOCKERS ofrecen ayuda a todos los clientes.',
-                'PREG_04_06' => 'Nuestros ADOCKERS ofrecen encontrar la talla que el cliente pide y si no hay talla, ofrecen alternativas.',
-                'PREG_04_07' => 'Nuestros ADOCKERS ofrecen medir el pie de los niños.',
-                'PREG_04_08' => 'Se ofrecen diferentes zapatos para que ajuste el pie correctamente cuando hay niños.',
-                'PREG_04_09' => 'Nuestros ADOCKERS elogian a los clientes por su elección de producto.',
-                'PREG_04_10' => 'Nuestros clientes son atendidos rápidamente en caja.',
-                'PREG_04_11' => '¿Han realizado los cursos de Academia ADOC?',
-                'PREG_04_12' => '¿Adockers hacen uso de la APP ADOCKY cuando atienden a los clientes en el piso de venta?',
-                'PREG_04_13' => 'Adockers hacen uso de la APP ADOCKY para realizar la representación de inventario.',
+                'PREG_04_02' => 'Personal con imagen presentable, con su respectivo uniforme según política.',
+                'PREG_04_03' => 'Amabilidad en el recibimiento de los clientes.',
+                'PREG_04_05' => 'Disponibilidad del personal para ayudar durante el recorrido, selección y prueba de calzado.',
+                'PREG_04_06' => 'Nuestros ADOCKERS ofrecen ayuda a todos los clientes.',
+                'PREG_04_07' => 'Nuestros ADOCKERS ofrecen encontrar la talla que el cliente pide y si no hay talla, ofrecen alternativas.',
+                'PREG_04_08' => 'Nuestros ADOCKERS ofrecen medir el pie de los niños.',
+                'PREG_04_09' => 'Se ofrecen diferentes zapatos para que ajuste el pie correctamente cuando hay niños.',
+                'PREG_04_10' => 'Nuestros ADOCKERS elogian a los clientes por su elección de producto.',
+                'PREG_04_11' => 'Nuestros clientes son atendidos rápidamente en caja.',
+                'PREG_04_12' => '¿Han realizado los cursos de Academia ADOC?',
+                'PREG_04_13' => '¿Adockers hacen uso de la APP ADOCKY cuando atienden a los clientes en el piso de venta?',
+                'PREG_04_14' => 'Adockers hacen uso de la APP ADOCKY para realizar la representación de inventario.',
             ],
             'kpis' => [
                 'PREG_05_01' => 'Venta',
@@ -347,7 +346,7 @@ class VisitaController extends Controller
     }
 
     /**
-     * Validar si el usuario tiene acceso a visitas del pa��s de la visita
+     * Validar si el usuario tiene acceso a visitas del pa�1�7�1�7s de la visita
      */
     private function validarAccesoPais($visitaData, $userData)
     {
@@ -356,12 +355,12 @@ class VisitaController extends Controller
             return true;
         }
 
-        // Para evaluador_pais, verificar pa��s espec��fico
+        // Para evaluador_pais, verificar pa�1�7�1�7s espec�1�7�1�7fico
         if ($userData['rol'] === 'evaluador_pais') {
             $paisVisita = $visitaData['pais'] ?? null;
             $paisPermitido = $userData['pais_acceso'] ?? null;
 
-            // Log del intento de acceso para auditor��a
+            // Log del intento de acceso para auditor�1�7�1�7a
             Log::info('Validación acceso por país', [
                 'usuario' => $userData['email'],
                 'rol' => $userData['rol'],
@@ -392,8 +391,8 @@ class VisitaController extends Controller
 
         return false;
     }
-
-    /**
+    
+        /**
      * Mostrar detalle de una sección específica de la visita
      */
     public function detalleArea($id, $seccion)
