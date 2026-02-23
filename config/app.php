@@ -8,7 +8,7 @@ return [
     'env' => env('APP_ENV', 'production'),
     'debug' => env('APP_DEBUG', false),
     'url' => env('APP_URL', 'http://localhost'),
-    'asset_url' => env('ASSET_URL', '/retail-dashboard'),
+    //'asset_url' => env('ASSET_URL', '/retail-dashboard'),
     'timezone' => env('APP_TIMEZONE', 'UTC'),
     'locale' => env('APP_LOCALE', 'es'),
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),

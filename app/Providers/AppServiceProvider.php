@@ -22,7 +22,7 @@ class AppServiceProvider extends ServiceProvider
 public function boot()
 {
     if (app()->environment('production')) {
-        $manifestPath = base_path('../public_html/retail-dashboard/build/manifest.json');
+        $manifestPath = base_path('../public_html/build/manifest.json');
         app()->bind('vite.manifest.path', function () use ($manifestPath) {
             return $manifestPath;
         });

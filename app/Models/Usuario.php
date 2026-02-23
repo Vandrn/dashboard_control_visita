@@ -158,93 +158,107 @@ class Usuario
             $userData = session('admin_user');
         }
 
-        $params = [];
-        $whereClause = $this->buildWhereClause($filtros, $userData, $params);
+        $cacheKey = 'estadisticas:' . md5(json_encode($filtros) . json_encode($userData['email'] ?? '') . json_encode($userData['rol'] ?? ''));
 
-        $query = sprintf(
-            'SELECT
-                COUNT(*) as total_visitas,
-                COUNT(DISTINCT pais) as total_paises,
-                COUNT(DISTINCT zona) as total_zonas,
-                COUNT(DISTINCT tienda) as total_tiendas,
-                COUNT(DISTINCT correo_realizo) as total_evaluadores,
-                DATE(MIN(fecha_hora_inicio)) as fecha_primera_visita,
-                DATE(MAX(fecha_hora_fin)) as fecha_ultima_visita
-            FROM `%s.%s.%s` %s',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable,
-            $whereClause
-        );
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($filtros, $userData) {
+            $params = [];
+            $whereClause = $this->buildWhereClause($filtros, $userData, $params);
 
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters($params);
+            $query = sprintf(
+                'SELECT
+                    COUNT(*) as total_visitas,
+                    COUNT(DISTINCT pais) as total_paises,
+                    COUNT(DISTINCT zona) as total_zonas,
+                    COUNT(DISTINCT tienda) as total_tiendas,
+                    COUNT(DISTINCT correo_realizo) as total_evaluadores,
+                    DATE(MIN(fecha_hora_inicio)) as fecha_primera_visita,
+                    DATE(MAX(fecha_hora_fin)) as fecha_ultima_visita
+                FROM `%s.%s.%s` %s',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable,
+                $whereClause
+            );
 
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $queryJobConfig = $this->bigQuery->query($query)
+                ->parameters($params);
 
-        foreach ($results->rows() as $row) {
-            return (array) $row;
-        }
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        return [
-            'total_visitas' => 0,
-            'total_paises' => 0,
-            'total_zonas' => 0,
-            'total_tiendas' => 0,
-            'total_evaluadores' => 0,
-            'fecha_primera_visita' => null,
-            'fecha_ultima_visita' => null
-        ];
+            foreach ($results->rows() as $row) {
+                return (array) $row;
+            }
+
+            return [
+                'total_visitas' => 0,
+                'total_paises' => 0,
+                'total_zonas' => 0,
+                'total_tiendas' => 0,
+                'total_evaluadores' => 0,
+                'fecha_primera_visita' => null,
+                'fecha_ultima_visita' => null
+            ];
+        });
     }
 
     public function getVisitasPaginadas($filtros = [], $page = 1, $perPage = 20, $userData = null)
     {
-        $params = [];
-        $whereClause = $this->buildWhereClause($filtros, $userData, $params);
-        $offset = ($page - 1) * $perPage;
-    
-        $query = sprintf(
-            'SELECT
-                v.id,
-                v.fecha_hora_inicio,
-                v.correo_realizo,
-                v.lider_zona,
-                v.pais,
-                v.zona,
-                v.tienda,
-                v.ubicacion,
-    
-                v.puntos_totales,
-                v.estrellas,
-    
-                -- ✅ TOTAL de imágenes (sin traer todo el JSON)
-                (
-                  SELECT IFNULL(SUM(ARRAY_LENGTH(p.imagenes)), 0)
-                  FROM UNNEST(v.secciones) s
-                  JOIN UNNEST(s.preguntas) p
-                ) AS total_imagenes
-    
-            FROM `%s.%s.%s` v
-            %s
-            ORDER BY v.fecha_hora_inicio DESC
-            LIMIT %d OFFSET %d',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable,
-            $whereClause,
-            $perPage,
-            $offset
-        );
-    
-        $queryJobConfig = $this->bigQuery->query($query)->parameters($params);
-        $results = $this->bigQuery->runQuery($queryJobConfig);
-    
-        $visitas = [];
-        foreach ($results->rows() as $row) {
-            $visitas[] = (array) $row;
-        }
-    
-        return $visitas;
+        $cacheKey = 'visitas_paginadas:' . md5(json_encode($filtros) . json_encode($userData['email'] ?? '') . json_encode($userData['rol'] ?? '') . $page . $perPage);
+
+        return Cache::remember($cacheKey, now()->addMinutes(2), function () use ($filtros, $page, $perPage, $userData) {
+            $params = [];
+            $whereClause = $this->buildWhereClause($filtros, $userData, $params);
+            $offset = ($page - 1) * $perPage;
+
+            $query = sprintf(
+                'SELECT
+                    v.id,
+                    v.fecha_hora_inicio,
+                    v.correo_realizo,
+                    v.lider_zona,
+                    v.pais,
+                    v.zona,
+                    v.tienda,
+                    v.ubicacion,
+
+                    v.puntos_totales,
+                    v.estrellas,
+
+                    -- ✅ TOTAL de imágenes (sin traer todo el JSON)
+                    (
+                      SELECT IFNULL(SUM(ARRAY_LENGTH(p.imagenes)), 0)
+                      FROM UNNEST(v.secciones) s
+                      JOIN UNNEST(s.preguntas) p
+                    ) AS total_imagenes
+
+                FROM `%s.%s.%s` v
+                %s
+                ORDER BY v.fecha_hora_inicio DESC
+                LIMIT %d OFFSET %d',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable,
+                $whereClause,
+                $perPage,
+                $offset
+            );
+
+            $queryJobConfig = $this->bigQuery->query($query)->parameters($params);
+            $results = $this->bigQuery->runQuery($queryJobConfig);
+
+            $visitas = [];
+            foreach ($results->rows() as $row) {
+                $visita = (array) $row;
+                // BigQuery Timestamp doesn't implement JsonSerializable — cast to string
+                // __toString() returns "Y-m-d H:i:s.uP" e.g. "2026-01-15 10:30:00.421827+00:00"
+                if (isset($visita['fecha_hora_inicio']) && is_object($visita['fecha_hora_inicio'])) {
+                    $visita['fecha_hora_inicio'] = (string) $visita['fecha_hora_inicio'];
+                }
+                $visitas[] = $visita;
+            }
+
+            return $visitas;
+        });
     }
 
     /**
@@ -252,37 +266,41 @@ class Usuario
      */
     public function getPaisesDisponibles($userData = null)
     {
-        $query = sprintf(
-            'SELECT DISTINCT pais FROM `%s.%s.%s` WHERE pais IS NOT NULL',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable
-        );
+        $cacheKey = 'paises:' . ($userData['rol'] ?? 'any') . ':' . ($userData['pais_acceso'] ?? 'ALL');
 
-        $params = [];
+        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($userData) {
+            $query = sprintf(
+                'SELECT DISTINCT pais FROM `%s.%s.%s` WHERE pais IS NOT NULL',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable
+            );
 
-        // Si es evaluador_pais, filtrar solo su país
-        if (
-            $userData && $userData['rol'] === 'evaluador_pais' &&
-            isset($userData['pais_acceso']) && $userData['pais_acceso'] !== 'ALL'
-        ) {
-            $query .= ' AND pais = @pais_acceso';
-            $params['pais_acceso'] = $this->sanitize($userData['pais_acceso']);
-        }
+            $params = [];
 
-        $query .= ' ORDER BY pais';
+            // Si es evaluador_pais, filtrar solo su país
+            if (
+                $userData && $userData['rol'] === 'evaluador_pais' &&
+                isset($userData['pais_acceso']) && $userData['pais_acceso'] !== 'ALL'
+            ) {
+                $query .= ' AND pais = @pais_acceso';
+                $params['pais_acceso'] = $this->sanitize($userData['pais_acceso']);
+            }
 
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters($params);
+            $query .= ' ORDER BY pais';
 
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $queryJobConfig = $this->bigQuery->query($query)
+                ->parameters($params);
 
-        $paises = [];
-        foreach ($results->rows() as $row) {
-            $paises[] = $row['pais'];
-        }
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        return $paises;
+            $paises = [];
+            foreach ($results->rows() as $row) {
+                $paises[] = $row['pais'];
+            }
+
+            return $paises;
+        });
     }
 
     /**
@@ -290,28 +308,30 @@ class Usuario
      */
     public function getEvaluadoresDisponibles()
     {
-        $query = sprintf(
-            'SELECT DISTINCT correo_realizo, lider_zona
-             FROM `%s.%s.%s`
-             WHERE correo_realizo IS NOT NULL
-             ORDER BY correo_realizo',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable
-        );
+        return Cache::remember('evaluadores_disponibles', now()->addMinutes(30), function () {
+            $query = sprintf(
+                'SELECT DISTINCT correo_realizo, lider_zona
+                 FROM `%s.%s.%s`
+                 WHERE correo_realizo IS NOT NULL
+                 ORDER BY correo_realizo',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable
+            );
 
-        $queryJobConfig = $this->bigQuery->query($query);
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $queryJobConfig = $this->bigQuery->query($query);
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        $evaluadores = [];
-        foreach ($results->rows() as $row) {
-            $evaluadores[] = [
-                'email' => $row['correo_realizo'],
-                'nombre' => $row['lider_zona'] ?? $row['correo_realizo']
-            ];
-        }
+            $evaluadores = [];
+            foreach ($results->rows() as $row) {
+                $evaluadores[] = [
+                    'email' => $row['correo_realizo'],
+                    'nombre' => $row['lider_zona'] ?? $row['correo_realizo']
+                ];
+            }
 
-        return $evaluadores;
+            return $evaluadores;
+        });
     }
 
     /**
@@ -390,27 +410,31 @@ class Usuario
      */
     public function contarVisitas($filtros = [], $userData = null)
     {
-        $params = [];
-        $whereClause = $this->buildWhereClause($filtros, $userData, $params); // ✅ Pasar userData
+        $cacheKey = 'contar_visitas:' . md5(json_encode($filtros) . json_encode($userData['email'] ?? '') . json_encode($userData['rol'] ?? ''));
 
-        $query = sprintf(
-            'SELECT COUNT(*) as total FROM `%s.%s.%s` %s',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable,
-            $whereClause
-        );
+        return Cache::remember($cacheKey, now()->addMinutes(2), function () use ($filtros, $userData) {
+            $params = [];
+            $whereClause = $this->buildWhereClause($filtros, $userData, $params);
 
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters($params);
+            $query = sprintf(
+                'SELECT COUNT(*) as total FROM `%s.%s.%s` %s',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable,
+                $whereClause
+            );
 
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $queryJobConfig = $this->bigQuery->query($query)
+                ->parameters($params);
 
-        foreach ($results->rows() as $row) {
-            return (int) $row['total'];
-        }
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        return 0;
+            foreach ($results->rows() as $row) {
+                return (int) $row['total'];
+            }
+
+            return 0;
+        });
     }
 
     /**
@@ -418,37 +442,41 @@ class Usuario
      */
     public function getVisitaCompleta($id, $userRole = null, $userEmail = null)
     {
-        $query = '
-            SELECT
-                gr.*,
-                CONCAT(CAST(g.LATITUD AS STRING), ",", CAST(g.LONGITUD AS STRING)) AS TIENDA_COORDENADAS
-            FROM `adoc-bi-dev.OPB.GR_nuevo` gr
-            LEFT JOIN `adoc-bi-prd.BI_Repo_Qlik.DIM_GEOLOCALIZACION` g
-              ON g.LAND1 = gr.pais
-             AND g.SORT1 = REGEXP_EXTRACT(gr.tienda, r"^([A-Z0-9]{3})")
-            WHERE gr.id = @id
-        ';
+        $cacheKey = 'visita:' . $id . ':' . ($userRole ?? 'any') . ':' . ($userEmail ?? 'any');
 
-        if ($userRole === 'evaluador' && $userEmail) {
-            $query .= ' AND gr.correo_realizo = @user_email';
-        }
+        return Cache::remember($cacheKey, now()->addHour(), function () use ($id, $userRole, $userEmail) {
+            $query = '
+                SELECT
+                    gr.*,
+                    CONCAT(CAST(g.LATITUD AS STRING), ",", CAST(g.LONGITUD AS STRING)) AS TIENDA_COORDENADAS
+                FROM `adoc-bi-dev.OPB.GR_nuevo` gr
+                LEFT JOIN `adoc-bi-prd.BI_Repo_Qlik.DIM_GEOLOCALIZACION` g
+                  ON g.LAND1 = gr.pais
+                 AND g.SORT1 = REGEXP_EXTRACT(gr.tienda, r"^([A-Z0-9]{3})")
+                WHERE gr.id = @id
+            ';
 
-        $query .= ' LIMIT 1';
+            if ($userRole === 'evaluador' && $userEmail) {
+                $query .= ' AND gr.correo_realizo = @user_email';
+            }
 
-        $parameters = ['id' => $id];
+            $query .= ' LIMIT 1';
 
-        if ($userRole === 'evaluador' && $userEmail) {
-            $parameters['user_email'] = $userEmail;
-        }
+            $parameters = ['id' => $id];
 
-        $queryJobConfig = $this->bigQuery->query($query)->parameters($parameters);
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            if ($userRole === 'evaluador' && $userEmail) {
+                $parameters['user_email'] = $userEmail;
+            }
 
-        foreach ($results->rows() as $row) {
-            return (array) $row;
-        }
+            $queryJobConfig = $this->bigQuery->query($query)->parameters($parameters);
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        return null;
+            foreach ($results->rows() as $row) {
+                return (array) $row;
+            }
+
+            return null;
+        });
     }
 
     /**
@@ -511,31 +539,55 @@ class Usuario
             'secciones' => []
         ];
 
-        // Reordenar secciones por nombre y también como array para tarjetas
+        // Mapeo de prefijos de código → nombre de sección correcto (según BigQuery)
+        $codigoMapping = [
+            'PREG_02' => 'operaciones',
+            'PREG_03' => 'administracion',
+            'PREG_04' => 'producto',
+            'PREG_05' => 'personal',
+            'PREG_06' => 'kpis',
+        ];
+
+        // Inicializar secciones en orden correcto
+        $seccionesOrdenadas = [
+            'operaciones'   => ['nombre_seccion' => 'operaciones',   'preguntas' => []],
+            'administracion'=> ['nombre_seccion' => 'administracion','preguntas' => []],
+            'producto'      => ['nombre_seccion' => 'producto',      'preguntas' => []],
+            'personal'      => ['nombre_seccion' => 'personal',      'preguntas' => []],
+        ];
+
+        // Agrupar preguntas por su código (no por nombre_seccion de BigQuery)
         foreach ($visita['secciones'] as $seccion) {
-            $nombre = $seccion['nombre_seccion'];
-            $preguntas = [];
-
             foreach ($seccion['preguntas'] as $pregunta) {
-                $codigo = $pregunta['codigo_pregunta'];
+                $codigo = strtoupper($pregunta['codigo_pregunta']);
 
-                $preguntas[$codigo] = [
-                    'codigo_pregunta' => $codigo,
-                    'respuesta' => $pregunta['respuesta'],
-                    'imagenes' => $pregunta['imagenes'] ?? []
+                $seccionNombre = null;
+                foreach ($codigoMapping as $prefijo => $nombre) {
+                    if (str_starts_with($codigo, $prefijo)) {
+                        $seccionNombre = $nombre;
+                        break;
+                    }
+                }
+
+                if ($seccionNombre && isset($seccionesOrdenadas[$seccionNombre])) {
+                    $seccionesOrdenadas[$seccionNombre]['preguntas'][$codigo] = [
+                        'codigo_pregunta' => $codigo,
+                        'respuesta'       => $pregunta['respuesta'],
+                        'imagenes'        => $pregunta['imagenes'] ?? [],
+                    ];
+                }
+            }
+        }
+
+        // Construir resultado de secciones
+        foreach ($seccionesOrdenadas as $nombre => $seccionData) {
+            if (!empty($seccionData['preguntas'])) {
+                $resultado[$nombre] = ['preguntas' => $seccionData['preguntas']];
+                $resultado['secciones'][] = [
+                    'nombre_seccion' => $nombre,
+                    'preguntas'      => array_values($seccionData['preguntas']),
                 ];
             }
-
-            // Agrupado por nombre de sección (acceso rápido por nombre)
-            $resultado[$nombre] = [
-                'preguntas' => $preguntas
-            ];
-
-            // También como array para las tarjetas y el detalle
-            $resultado['secciones'][] = [
-                'nombre_seccion' => $nombre,
-                'preguntas' => array_values($preguntas) // Para que sea un array indexado y el foreach del Blade funcione
-            ];
         }
 
         // Reorganizar KPIs (si los usás)
@@ -592,11 +644,13 @@ class Usuario
 
             if ($conteo > 0) {
                 $promedio = $suma / $conteo;
+                // Las respuestas vienen en escala 0-5; normalizar a 0-1 para las funciones de display
+                $promedioNorm = $promedio / 5;
 
                 $resultados[$seccion] = [
-                    'promedio' => $promedio,
-                    'porcentaje' => $promedio * 100,
-                    'estrellas' => $promedio * 5,
+                    'promedio'        => $promedioNorm,
+                    'porcentaje'      => $promedioNorm * 100,
+                    'estrellas'       => $promedio,
                     'total_preguntas' => $conteo
                 ];
             }
@@ -612,13 +666,16 @@ class Usuario
     {
         $resultados = [];
 
-        foreach ($visita['secciones'] as $nombre => $preguntas) {
+        foreach ($visita['secciones'] as $seccionData) {
+            $nombre = $seccionData['nombre_seccion'] ?? null;
+            if (!$nombre) continue;
+
             $suma = 0;
             $total = 0;
 
-            foreach ($preguntas as $codigo => $data) {
-                if (isset($data['respuesta']) && is_numeric($data['respuesta'])) {
-                    $suma += floatval($data['respuesta']);
+            foreach ($seccionData['preguntas'] as $pregunta) {
+                if (isset($pregunta['respuesta']) && is_numeric($pregunta['respuesta'])) {
+                    $suma += floatval($pregunta['respuesta']);
                     $total++;
                 }
             }
@@ -775,36 +832,40 @@ class Usuario
      */
     public function getTiendasDisponibles($userData = null)
     {
-        $query = sprintf(
-            'SELECT DISTINCT a.tienda FROM `%s.%s.%s` a WHERE a.tienda IS NOT NULL',
-            $this->projectId,
-            $this->dataset,
-            $this->visitasTable
-        );
+        $cacheKey = 'tiendas:' . ($userData['rol'] ?? 'any') . ':' . ($userData['pais_acceso'] ?? 'ALL');
 
-        $params = [];
+        return Cache::remember($cacheKey, now()->addMinutes(30), function () use ($userData) {
+            $query = sprintf(
+                'SELECT DISTINCT a.tienda FROM `%s.%s.%s` a WHERE a.tienda IS NOT NULL',
+                $this->projectId,
+                $this->dataset,
+                $this->visitasTable
+            );
 
-        // Si es evaluador_pais, filtrar solo su país
-        if (
-            $userData && $userData['rol'] === 'evaluador_pais' &&
-            isset($userData['pais_acceso']) && $userData['pais_acceso'] !== 'ALL'
-        ) {
-            $query .= ' AND a.pais = @pais_acceso';
-            $params['pais_acceso'] = $this->sanitize($userData['pais_acceso']);
-        }
+            $params = [];
 
-        $query .= ' ORDER BY a.tienda';
+            // Si es evaluador_pais, filtrar solo su país
+            if (
+                $userData && $userData['rol'] === 'evaluador_pais' &&
+                isset($userData['pais_acceso']) && $userData['pais_acceso'] !== 'ALL'
+            ) {
+                $query .= ' AND a.pais = @pais_acceso';
+                $params['pais_acceso'] = $this->sanitize($userData['pais_acceso']);
+            }
 
-        $queryJobConfig = $this->bigQuery->query($query)
-            ->parameters($params);
+            $query .= ' ORDER BY a.tienda';
 
-        $results = $this->bigQuery->runQuery($queryJobConfig);
+            $queryJobConfig = $this->bigQuery->query($query)
+                ->parameters($params);
 
-        $tiendas = [];
-        foreach ($results->rows() as $row) {
-            $tiendas[] = $row['tienda'];
-        }
+            $results = $this->bigQuery->runQuery($queryJobConfig);
 
-        return $tiendas;
+            $tiendas = [];
+            foreach ($results->rows() as $row) {
+                $tiendas[] = $row['tienda'];
+            }
+
+            return $tiendas;
+        });
     }
 }

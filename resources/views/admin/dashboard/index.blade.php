@@ -152,227 +152,295 @@
     <!-- Filtros -->
     @include('admin.components.filtros')
 
-    <!-- Contenido Principal -->
+    <!-- Contenido Principal — tabla cargada vía AJAX -->
     <div class="bg-white shadow rounded-lg">
-        <!-- Header de la tabla -->
         <div class="px-6 py-4 border-b border-gray-200">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
                 <h3 class="text-lg font-medium text-gray-900">
                     Visitas Registradas
-                    @if($paginacion['total'] > 0)
-                    <span class="text-sm font-normal text-gray-500">
-                        ({{ number_format($paginacion['total']) }} total{{ $paginacion['total'] != 1 ? 'es' : '' }})
+                    <span id="totalVisitasLabel" class="text-sm font-normal text-gray-500">
+                        @if(($paginacion['total'] ?? 0) > 0)
+                        ({{ number_format($paginacion['total']) }} totales)
+                        @endif
                     </span>
-                    @endif
                 </h3>
-
-                <!-- Selector de elementos por página -->
                 <div class="mt-3 sm:mt-0 flex items-center space-x-2">
                     <label class="text-sm text-gray-700">Mostrar:</label>
-                    <select onchange="cambiarPaginacion(this.value)"
+                    <select id="perPageSelect" onchange="cambiarPaginacion(this.value)"
                         class="border border-gray-300 rounded px-2 py-1 text-sm">
                         <option value="10" {{ ($paginacion['per_page'] ?? 20) == 10 ? 'selected' : '' }}>10</option>
                         <option value="20" {{ ($paginacion['per_page'] ?? 20) == 20 ? 'selected' : '' }}>20</option>
                         <option value="50" {{ ($paginacion['per_page'] ?? 20) == 50 ? 'selected' : '' }}>50</option>
-
                     </select>
                     <span class="text-sm text-gray-700">por página</span>
                 </div>
             </div>
         </div>
 
-        <!-- Lista de visitas -->
-        @if(count($visitas) > 0)
-        <!-- Vista móvil: Cards -->
-        <div class="md:hidden">
-            <div class="divide-y divide-gray-200">
-                @foreach($visitas as $visita)
-                <div class="p-4">
-                    @include('admin.components.tarjeta-visita')
-                </div>
-                @endforeach
+        <!-- Contenedor de la tabla — se rellena vía AJAX -->
+        <div id="visitasContainer">
+            <div class="p-12 text-center">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-4 text-sm text-gray-500">Cargando visitas...</p>
             </div>
         </div>
 
-        <!-- Vista desktop: Tabla -->
-        <div class="hidden md:block overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Tienda / Evaluador
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Ubicación
-                            @if(session('admin_user.rol') === 'evaluador_pais')
-                            <span class="text-orange-500">*</span>
-                            @endif
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Fecha
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Puntuación
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Imágenes
-                        </th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Acciones
-                        </th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    @foreach($visitas as $visita)
-                    <tr class="hover:bg-gray-50">
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div>
-                                <div class="text-sm font-medium text-gray-900">
-                                    {{ $visita['tienda'] ?? 'N/A' }}
-                                </div>
-                                <div class="text-sm text-gray-500">
-                                    {{ $visita['lider_zona'] ?? $visita['correo_realizo'] }}
-                                </div>
-                            </div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <div class="text-sm text-gray-900">{{ $visita['pais'] ?? 'N/A' }}</div>
-                            <div class="text-sm text-gray-500">{{ $visita['zona'] ?? 'N/A' }}</div>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ \Carbon\Carbon::parse($visita['fecha_hora_inicio'], 'UTC')
-                                ->setTimezone(config('app.display_tz', 'America/El_Salvador'))
-                                ->format('d/m/Y H:i') }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            @php
-                                $estrellas = isset($visita['estrellas']) ? floatval($visita['estrellas']) : null;
-                                $colorClass = $estrellas === null ? 'text-gray-400'
-                                    : ($estrellas >= 4 ? 'text-green-500' : ($estrellas >= 3 ? 'text-yellow-500' : 'text-red-500'));
-                            @endphp
-                        
-                            @if($estrellas !== null && $estrellas > 0)
-                                <div class="flex items-center">
-                                    <div class="flex {{ $colorClass }}">
-                                        @for($i = 1; $i <= 5; $i++)
-                                            @if($i <= round($estrellas))
-                                                ⭐
-                                            @else
-                                                ☆
-                                            @endif
-                                        @endfor
-                                    </div>
-                                    <span class="ml-2 text-sm {{ $colorClass }}">
-                                        {{ number_format($estrellas, 1) }}
-                                    </span>
-                                </div>
-                            @else
-                                <span class="text-gray-400">N/A</span>
-                            @endif
-                        </td>
-
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            @php
-                                $totalImagenes = isset($visita['total_imagenes']) ? (int)$visita['total_imagenes'] : 0;
-                            @endphp
-                        
-                            <span class="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">
-                                {{ $totalImagenes }}
-                            </span>
-                        </td>
-
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div class="flex justify-end space-x-2">
-                                <a href="{{ route('admin.visita.show', $visita['id']) }}"
-                                    class="text-blue-600 hover:text-blue-900">Ver</a>
-                                <a href="{{ route('admin.visita.imagenes', $visita['id']) }}"
-                                    class="text-gray-600 hover:text-gray-900">📷</a>
-                            </div>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Paginación -->
-        @if($paginacion['total_pages'] > 1)
-        <div class="px-6 py-4 border-t border-gray-200">
-            <div class="flex items-center justify-between">
-                <div class="text-sm text-gray-700">
-                    Mostrando
-                    <span class="font-medium">{{ (($paginacion['current_page'] - 1) * $paginacion['per_page']) + 1 }}</span>
-                    a
-                    <span class="font-medium">{{ min($paginacion['current_page'] * $paginacion['per_page'], $paginacion['total']) }}</span>
-                    de
-                    <span class="font-medium">{{ number_format($paginacion['total']) }}</span>
-                    resultados
-                </div>
-
-                <div class="flex space-x-2">
-                    @if($paginacion['current_page'] > 1)
-                    <a href="?page={{ $paginacion['current_page'] - 1 }}&{{ http_build_query(request()->except('page')) }}"
-                        class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                        Anterior
-                    </a>
-                    @endif
-
-                    @for($i = max(1, $paginacion['current_page'] - 2); $i <= min($paginacion['total_pages'], $paginacion['current_page'] + 2); $i++)
-                        <a href="?page={{ $i }}&{{ http_build_query(request()->except('page')) }}"
-                        class="px-3 py-2 text-sm font-medium {{ $i == $paginacion['current_page'] ? 'text-blue-600 bg-blue-50 border-blue-500' : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50' }} border rounded-md">
-                        {{ $i }}
-                        </a>
-                        @endfor
-
-                        @if($paginacion['current_page'] < $paginacion['total_pages'])
-                            <a href="?page={{ $paginacion['current_page'] + 1 }}&{{ http_build_query(request()->except('page')) }}"
-                            class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
-                            Siguiente
-                            </a>
-                            @endif
-                </div>
-            </div>
-        </div>
-        @endif
-
-        @else
-        <!-- Estado vacío -->
-        <div class="text-center py-12">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900">No hay visitas</h3>
-            <p class="mt-1 text-sm text-gray-500">
-                No se encontraron visitas con los filtros aplicados.
-            </p>
-            <div class="mt-6">
-                <a href="{{ route('admin.dashboard') }}"
-                    class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-                    Limpiar Filtros
-                </a>
-            </div>
-        </div>
-        @endif
+        <!-- Paginación — se rellena vía AJAX -->
+        <div id="paginacionContainer"></div>
     </div>
 </div>
 
 <script>
+    let _currentPage = 1;
+    let _perPage = {{ (int) ($paginacion['per_page'] ?? 20) }};
+    let _loadingVisitas = false;
+
+    function _esc(str) {
+        if (str == null) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function _formatFecha(fechaStr) {
+        if (!fechaStr) return '';
+        try {
+            // BigQuery PHP SDK returns timestamps as "2026-01-15 10:30:00 UTC"
+            // Normalize to ISO 8601 for new Date() compatibility
+            let s = String(fechaStr)
+                .replace(' UTC', 'Z')          // "... UTC" → "...Z"
+                .replace(/\s/, 'T');           // first space → T (date/time separator)
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return fechaStr;
+            return d.toLocaleString('es-SV', {
+                timeZone: 'America/El_Salvador',
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: false
+            }).replace(',', '');
+        } catch(e) { return fechaStr || ''; }
+    }
+
+    function _renderEstrellas(estrellas) {
+        if (!estrellas || parseFloat(estrellas) === 0) {
+            return '<span class="text-gray-400">N/A</span>';
+        }
+        const val = parseFloat(estrellas);
+        const colorClass = val >= 4 ? 'text-green-500' : (val >= 3 ? 'text-yellow-500' : 'text-red-500');
+        let stars = '';
+        for (let i = 1; i <= 5; i++) stars += (i <= Math.round(val)) ? '⭐' : '☆';
+        return `<div class="flex items-center"><div class="flex ${colorClass}">${stars}</div><span class="ml-2 text-sm ${colorClass}">${val.toFixed(1)}</span></div>`;
+    }
+
+    function _renderTabla(visitas, pagination) {
+        document.getElementById('totalVisitasLabel').textContent =
+            pagination.total > 0 ? `(${pagination.total.toLocaleString()} totales)` : '';
+
+        if (!visitas || visitas.length === 0) {
+            document.getElementById('visitasContainer').innerHTML = `
+                <div class="text-center py-12">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <h3 class="mt-2 text-sm font-medium text-gray-900">No hay visitas</h3>
+                    <p class="mt-1 text-sm text-gray-500">No se encontraron visitas con los filtros aplicados.</p>
+                    <div class="mt-6">
+                        <a href="{{ route('admin.dashboard') }}"
+                            class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                            Limpiar Filtros
+                        </a>
+                    </div>
+                </div>`;
+            document.getElementById('paginacionContainer').innerHTML = '';
+            return;
+        }
+
+        // Tabla desktop
+        let rows = '';
+        visitas.forEach(v => {
+            const tienda    = _esc(v.tienda    ?? 'N/A');
+            const evaluador = _esc(v.lider_zona ?? v.correo_realizo ?? '');
+            const pais      = _esc(v.pais ?? 'N/A');
+            const zona      = _esc(v.zona ?? 'N/A');
+            const fecha     = _esc(_formatFecha(v.fecha_hora_inicio));
+            const imagenes  = parseInt(v.total_imagenes ?? 0);
+            const id        = _esc(v.id ?? '');
+
+            rows += `<tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-medium text-gray-900">${tienda}</div>
+                    <div class="text-sm text-gray-500">${evaluador}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm text-gray-900">${pais}</div>
+                    <div class="text-sm text-gray-500">${zona}</div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${fecha}</td>
+                <td class="px-6 py-4 whitespace-nowrap">${_renderEstrellas(v.estrellas)}</td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="inline-flex items-center px-2 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">${imagenes}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div class="flex justify-end space-x-2">
+                        <a href="/admin/visita/${id}" class="text-blue-600 hover:text-blue-900">Ver</a>
+                        <a href="/admin/visita/${id}/imagenes" class="text-gray-600 hover:text-gray-900">📷</a>
+                    </div>
+                </td>
+            </tr>`;
+        });
+
+        // Cards móvil
+        let cards = '';
+        visitas.forEach(v => {
+            const tienda    = _esc(v.tienda    ?? 'N/A');
+            const evaluador = _esc(v.lider_zona ?? v.correo_realizo ?? '');
+            const pais      = _esc(v.pais ?? 'N/A');
+            const zona      = _esc(v.zona ?? 'N/A');
+            const fecha     = _esc(_formatFecha(v.fecha_hora_inicio));
+            const imagenes  = parseInt(v.total_imagenes ?? 0);
+            const id        = _esc(v.id ?? '');
+
+            cards += `<div class="p-4 border-b border-gray-200">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="font-medium text-gray-900">${tienda}</div>
+                        <div class="text-sm text-gray-500">${evaluador}</div>
+                        <div class="text-sm text-gray-500 mt-1">${pais} · ${zona}</div>
+                        <div class="text-sm text-gray-400 mt-1">${fecha}</div>
+                    </div>
+                    <div class="flex flex-col items-end space-y-1 ml-2">
+                        ${_renderEstrellas(v.estrellas)}
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold">📷 ${imagenes}</span>
+                    </div>
+                </div>
+                <div class="mt-3 flex space-x-3">
+                    <a href="/admin/visita/${id}" class="text-sm text-blue-600 hover:text-blue-900">Ver detalle</a>
+                    <a href="/admin/visita/${id}/imagenes" class="text-sm text-gray-600 hover:text-gray-900">Ver imágenes</a>
+                </div>
+            </div>`;
+        });
+
+        document.getElementById('visitasContainer').innerHTML = `
+            <div class="md:hidden"><div class="divide-y divide-gray-100">${cards}</div></div>
+            <div class="hidden md:block overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tienda / Evaluador</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ubicación</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Puntuación</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Imágenes</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">${rows}</tbody>
+                </table>
+            </div>`;
+
+        _renderPaginacion(pagination);
+    }
+
+    function _renderPaginacion(pagination) {
+        const container = document.getElementById('paginacionContainer');
+        if (!pagination || pagination.total_pages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const cur   = pagination.current_page;
+        const total = pagination.total_pages;
+        const from  = ((cur - 1) * pagination.per_page) + 1;
+        const to    = Math.min(cur * pagination.per_page, pagination.total);
+
+        let btns = '';
+        if (cur > 1) btns += `<button onclick="irPagina(${cur - 1})" class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Anterior</button>`;
+
+        const start = Math.max(1, cur - 2);
+        const end   = Math.min(total, cur + 2);
+        for (let i = start; i <= end; i++) {
+            const active = i === cur
+                ? 'text-blue-600 bg-blue-50 border-blue-500'
+                : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50';
+            btns += `<button onclick="irPagina(${i})" class="px-3 py-2 text-sm font-medium ${active} border rounded-md">${i}</button>`;
+        }
+
+        if (cur < total) btns += `<button onclick="irPagina(${cur + 1})" class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50">Siguiente</button>`;
+
+        container.innerHTML = `
+            <div class="px-6 py-4 border-t border-gray-200">
+                <div class="flex items-center justify-between">
+                    <div class="text-sm text-gray-700">
+                        Mostrando <span class="font-medium">${from.toLocaleString()}</span>
+                        a <span class="font-medium">${to.toLocaleString()}</span>
+                        de <span class="font-medium">${pagination.total.toLocaleString()}</span> resultados
+                    </div>
+                    <div class="flex space-x-2">${btns}</div>
+                </div>
+            </div>`;
+    }
+
+    async function cargarVisitas() {
+        if (_loadingVisitas) return;
+        _loadingVisitas = true;
+
+        document.getElementById('visitasContainer').innerHTML = `
+            <div class="p-12 text-center">
+                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-4 text-sm text-gray-500">Cargando visitas...</p>
+            </div>`;
+        document.getElementById('paginacionContainer').innerHTML = '';
+
+        try {
+            const params = new URLSearchParams(window.location.search);
+            params.set('page', _currentPage);
+            params.set('per_page', _perPage);
+
+            const response = await fetch('{{ route("admin.api.visitas") }}?' + params.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            const data = await response.json();
+
+            if (!data.success) throw new Error(data.error || 'Error al cargar visitas');
+            _renderTabla(data.data, data.pagination);
+
+        } catch (e) {
+            document.getElementById('visitasContainer').innerHTML = `
+                <div class="p-8 text-center text-red-600">
+                    <p class="font-medium">Error al cargar las visitas.</p>
+                    <button onclick="cargarVisitas()" class="mt-3 px-4 py-2 text-sm bg-red-100 rounded hover:bg-red-200">Reintentar</button>
+                </div>`;
+        } finally {
+            _loadingVisitas = false;
+        }
+    }
+
+    function irPagina(page) {
+        _currentPage = page;
+        cargarVisitas();
+        window.scrollTo({ top: document.getElementById('visitasContainer').offsetTop - 20, behavior: 'smooth' });
+    }
+
+    function cambiarPaginacion(value) {
+        _perPage = parseInt(value);
+        _currentPage = 1;
+        cargarVisitas();
+    }
+
     function dashboardComponent() {
         return {
             cargando: false,
-
             refrescarDatos() {
                 this.cargando = true;
                 window.location.reload();
             }
-        }
+        };
     }
 
-    function cambiarPaginacion(perPage) {
-        const url = new URL(window.location);
-        url.searchParams.set('per_page', perPage);
-        url.searchParams.delete('page'); // Reset a página 1
-        window.location.href = url.toString();
-    }
+    document.addEventListener('DOMContentLoaded', cargarVisitas);
 </script>
 @endsection

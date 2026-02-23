@@ -24,6 +24,7 @@ class VisitaController extends Controller
      */
     public function show($id)
     {
+        set_time_limit(120);
         try {
             $user = session('admin_user');
 
@@ -49,9 +50,11 @@ class VisitaController extends Controller
             // Procesar datos para display
             $visita = $this->usuario->procesarDatosVisita($visitaRaw);
 
-            // Convertir fechas a hora local (UTC-6)
-            $visita['fecha_hora_inicio_local'] = Carbon::parse($visitaRaw['fecha_hora_inicio'])->subHours(6)->format('Y-m-d H:i:s');
-            $visita['fecha_hora_fin_local'] = Carbon::parse($visitaRaw['fecha_hora_fin'])->format('Y-m-d H:i:s');
+            // Convertir fechas a hora local (UTC-6 / America/El_Salvador)
+            $visita['fecha_hora_inicio_local'] = Carbon::parse((string) ($visitaRaw['fecha_hora_inicio'] ?? ''))->setTimezone('America/El_Salvador')->format('Y-m-d H:i:s');
+            $visita['fecha_hora_fin_local'] = $visitaRaw['fecha_hora_fin']
+                ? Carbon::parse((string) $visitaRaw['fecha_hora_fin'])->setTimezone('America/El_Salvador')->format('Y-m-d H:i:s')
+                : null;
 
             // Calcular puntuaciones
             $puntuaciones = $this->usuario->calcularPuntuaciones($visita);
@@ -65,12 +68,8 @@ class VisitaController extends Controller
             // Obtener nombres de KPIs para visualización
             $kpis_nombres = $textosPreguntas['kpis'] ?? [];
 
-            // 📍 AGREGAR VALIDACIÓN DE DISTANCIA
-            $validacionDistancia = $this->usuario->getValidacionDistancia(
-                $id,
-                $user['rol'],
-                $user['email']
-            );
+            // 📍 VALIDACIÓN DE DISTANCIA (reutiliza $visitaRaw ya obtenido, evita segunda consulta a BigQuery)
+            $validacionDistancia = $this->usuario->validarDistanciaVisita($visitaRaw);
 
             return view('admin.visitas.show', compact(
                 'visita',
@@ -98,6 +97,7 @@ class VisitaController extends Controller
      */
     public function imagenes($id)
     {
+        set_time_limit(120);
         try {
             $user = session('admin_user');
 
@@ -140,7 +140,7 @@ class VisitaController extends Controller
                 ];
 
                 foreach ($seccion['preguntas'] as $pregunta) {
-                    $codigo = $pregunta['codigo_pregunta'];
+                    $codigo = strtoupper($pregunta['codigo_pregunta']);
                     $observaciones = $pregunta['observaciones'] ?? $pregunta['respuesta'] ?? null;
                     $urls = $pregunta['imagenes'] ?? [];
 
@@ -209,6 +209,7 @@ class VisitaController extends Controller
      */
     public function getVisitaData($id)
     {
+        set_time_limit(120);
         try {
             $user = session('admin_user');
 
@@ -237,12 +238,8 @@ class VisitaController extends Controller
             $puntuaciones = $this->usuario->calcularPuntuaciones($visita);
             $puntajesPorArea = $this->usuario->calcularPuntajesPorArea($visita);
 
-            // AGREGAR VALIDACIÓN DE DISTANCIA PARA API
-            $validacionDistancia = $this->usuario->getValidacionDistancia(
-                $id,
-                $user['rol'],
-                $user['email']
-            );
+            // VALIDACIÓN DE DISTANCIA PARA API (reutiliza $visitaRaw, evita segunda consulta a BigQuery)
+            $validacionDistancia = $this->usuario->validarDistanciaVisita($visitaRaw);
 
             return response()->json([
                 'success' => true,
@@ -267,70 +264,70 @@ class VisitaController extends Controller
     {
         $estructura = [
             'operaciones' => [
-                'PREG_01_01' => 'Pintura de tienda en buen estado. Interior/Exterior.',
-                'PREG_01_02' => 'Vitrinas de tiendas limpias, con iluminación y acrílicos en buen estado.',
-                'PREG_01_03' => 'Exhibición de producto en vitrina según estándares.',
-                'PREG_01_04' => 'Sala de ventas limpia, ordenada y con iluminación en buen estado.',
-                'PREG_01_05' => 'Aires acondicionados/ventiladores y escaleras en buen estado.',
-                'PREG_01_06' => 'Repisas, mesas y muebles de exhibición limpios y en buen estado.',
-                'PREG_01_07' => 'Mueble de caja limpio, ordenado y en buen estado',
-                'PREG_01_08' => 'Equipo funcionando (radio, tel., cel., conteo de clientes, eq. de computo).',
-                'PREG_01_09' => 'Utilización de la radio ADOC para ambientar la tienda.',
-                'PREG_01_10' => 'Bodega limpia, con iluminación en buen estado y ordenada según manual.',
-                'PREG_01_11' => 'Accesorios de limpieza ordenados y ubicados en el lugar adecuado.',
-                'PREG_01_12' => 'Área de comida limpia y articulos personales ordenados en su área.',
-                'PREG_01_13' => 'Baño limpio y ordenado',
-                'PREG_01_14' => 'La tienda cuenta con suficientes sillas o bancos en buen estado (limpios y lavados) para que los clientes se prueben los zapatos (según planograma o layout). NOTA: Si los sillones están sucios deben mandarse a lavar.',
-                'PREG_01_15' => 'Las cajas alzadoras de zapatos se usan en las exhibiciones.',
-                'PREG_01_16' => 'No se usa cinta adhesiva (tape) en ningun lugar de la tienda.',
-                'PREG_01_17' => 'No hay muebles dañados, rotos o qubrados en la tienda.',
-                'PREG_01_18' => 'El area de caja está ordenada y conforme a los estándares autorizados y en servicio.',
-                'PREG_01_19' => 'Se ofrecen accesorios a los clientes en cada visita o compra.',
-                'PREG_01_20' => 'Todas las luces de los muebles de pared y mesa son funcionales y emiten una luz amarilla intensa (3500-4000 lúmenes).',
-                'PREG_01_21' => 'Las pantallas de la vitrina estan posicionadas a 90 grados (de forma vertical).',
-                'PREG_01_22' => 'Los azulejos, la fórmica y el piso no están dañados en ningún lugar de la tienda.',
+                'PREG_02_01' => 'Pintura de tienda en buen estado. Interior/Exterior.',
+                'PREG_02_02' => 'Vitrinas de tiendas limpias, con iluminación y acrílicos en buen estado.',
+                'PREG_02_03' => 'Exhibición de producto en vitrina según estándares.',
+                'PREG_02_04' => 'Sala de ventas limpia, ordenada y con iluminación en buen estado.',
+                'PREG_02_05' => 'Aires acondicionados/ventiladores y escaleras en buen estado.',
+                'PREG_02_06' => 'Repisas, mesas y muebles de exhibición limpios y en buen estado.',
+                'PREG_02_07' => 'Mueble de caja limpio, ordenado y en buen estado',
+                'PREG_02_08' => 'Equipo funcionando (radio, tel., cel., conteo de clientes, eq. de computo).',
+                'PREG_02_09' => 'Utilización de la radio ADOC para ambientar la tienda.',
+                'PREG_02_10' => 'Bodega limpia, con iluminación en buen estado y ordenada según manual.',
+                'PREG_02_11' => 'Accesorios de limpieza ordenados y ubicados en el lugar adecuado.',
+                'PREG_02_12' => 'Área de comida limpia y articulos personales ordenados en su área.',
+                'PREG_02_13' => 'Baño limpio y ordenado',
+                'PREG_02_14' => 'La tienda cuenta con suficientes sillas o bancos en buen estado (limpios y lavados) para que los clientes se prueben los zapatos (según planograma o layout). NOTA: Si los sillones están sucios deben mandarse a lavar.',
+                'PREG_02_15' => 'Las cajas alzadoras de zapatos se usan en las exhibiciones.',
+                'PREG_02_16' => 'No se usa cinta adhesiva (tape) en ningun lugar de la tienda.',
+                'PREG_02_17' => 'No hay muebles dañados, rotos o qubrados en la tienda.',
+                'PREG_02_18' => 'El area de caja está ordenada y conforme a los estándares autorizados y en servicio.',
+                'PREG_02_19' => 'Se ofrecen accesorios a los clientes en cada visita o compra.',
+                'PREG_02_20' => 'Todas las luces de los muebles de pared y mesa son funcionales y emiten una luz amarilla intensa (3500-4000 lúmenes).',
+                'PREG_02_21' => 'Las pantallas de la vitrina estan posicionadas a 90 grados (de forma vertical).',
+                'PREG_02_22' => 'Los azulejos, la fórmica y el piso no están dañados en ningún lugar de la tienda.',
             ],
             'administracion' => [
-                'PREG_02_01' => 'Cuenta de orden al día.',
-                'PREG_02_02' => 'Documentos de transferencias y envíos ingresados al sistema al día',
-                'PREG_02_03' => 'Remesas de efectivo al día e ingresados al sistema',
-                'PREG_02_04' => 'Libro de cuadre de efectivo y caja chica al día',
-                'PREG_02_05' => 'Libro de horarios al día y firmados por los empleados',
-                'PREG_02_06' => 'Conteo efectuados según lineamientos establecidos.',
-                'PREG_02_08' => 'Files actualizados.',
+                'PREG_03_01' => 'Cuenta de orden al día.',
+                'PREG_03_02' => 'Documentos de transferencias y envíos ingresados al sistema al día',
+                'PREG_03_03' => 'Remesas de efectivo al día e ingresados al sistema',
+                'PREG_03_04' => 'Libro de cuadre de efectivo y caja chica al día',
+                'PREG_03_05' => 'Libro de horarios al día y firmados por los empleados',
+                'PREG_03_06' => 'Conteo efectuados según lineamientos establecidos.',
+                'PREG_03_07' => 'Files actualizados.',
             ],
             'producto' => [
-                'PREG_03_01' => 'Nuevos estilos exhibidos en sala de venta.',
-                'PREG_03_02' => 'Artículos exhibidos con su etiqueta y precio correcto. Nota: Si un zapato llega dañado de fábrica reportarlo de inmediato y retírelo del piso de venta.',
-                'PREG_03_03' => 'Cambios de precio realizado, firmado y archivado. Nota: Es prohibido colocar otro precio que no sea el oficial.',
-                'PREG_03_04' => 'Promociones actualizadas y compartidas con todo el personal.',
-                'PREG_03_05' => 'Implementación de planogramas(Producto, POP, Manuales).',
-                'PREG_03_06' => 'En las exhibiciones están todos los estilos disponibles en la tienda representados por talla (sin ningún zapato dañado o sucio).',
-                'PREG_03_07' => 'Todas las sandalias en exhibidores y/o mesas usan modeladores acrílicos.',
-                'PREG_03_08' => 'Todas las sandalias y zapatos abiertos tienen un acrílico.',
-                'PREG_03_09' => 'Todas las carteras tienen un alzador en las exhibiciones.',
+                'PREG_04_01' => 'Nuevos estilos exhibidos en sala de venta.',
+                'PREG_04_02' => 'Artículos exhibidos con su etiqueta y precio correcto. Nota: Si un zapato llega dañado de fábrica reportarlo de inmediato y retírelo del piso de venta.',
+                'PREG_04_03' => 'Cambios de precio realizado, firmado y archivado. Nota: Es prohibido colocar otro precio que no sea el oficial.',
+                'PREG_04_04' => 'Promociones actualizadas y compartidas con todo el personal.',
+                'PREG_04_05' => 'Implementación de planogramas(Producto, POP, Manuales).',
+                'PREG_04_06' => 'En las exhibiciones están todos los estilos disponibles en la tienda representados por talla (sin ningún zapato dañado o sucio).',
+                'PREG_04_07' => 'Todas las sandalias en exhibidores y/o mesas usan modeladores acrílicos.',
+                'PREG_04_08' => 'Todas las sandalias y zapatos abiertos tienen un acrílico.',
+                'PREG_04_09' => 'Todas las carteras tienen un alzador en las exhibiciones.',
             ],
             'personal' => [
-                'PREG_04_02' => 'Personal con imagen presentable, con su respectivo uniforme según política.',
-                'PREG_04_03' => 'Amabilidad en el recibimiento de los clientes.',
-                'PREG_04_05' => 'Disponibilidad del personal para ayudar durante el recorrido, selección y prueba de calzado.',
-                'PREG_04_06' => 'Nuestros ADOCKERS ofrecen ayuda a todos los clientes.',
-                'PREG_04_07' => 'Nuestros ADOCKERS ofrecen encontrar la talla que el cliente pide y si no hay talla, ofrecen alternativas.',
-                'PREG_04_08' => 'Nuestros ADOCKERS ofrecen medir el pie de los niños.',
-                'PREG_04_09' => 'Se ofrecen diferentes zapatos para que ajuste el pie correctamente cuando hay niños.',
-                'PREG_04_10' => 'Nuestros ADOCKERS elogian a los clientes por su elección de producto.',
-                'PREG_04_11' => 'Nuestros clientes son atendidos rápidamente en caja.',
-                'PREG_04_12' => '¿Han realizado los cursos de Academia ADOC?',
-                'PREG_04_13' => '¿Adockers hacen uso de la APP ADOCKY cuando atienden a los clientes en el piso de venta?',
-                'PREG_04_14' => 'Adockers hacen uso de la APP ADOCKY para realizar la representación de inventario.',
+                'PREG_05_01' => 'Personal con imagen presentable, con su respectivo uniforme según política.',
+                'PREG_05_02' => 'Amabilidad en el recibimiento de los clientes.',
+                'PREG_05_03' => 'Disponibilidad del personal para ayudar durante el recorrido, selección y prueba de calzado.',
+                'PREG_05_04' => 'Nuestros ADOCKERS ofrecen ayuda a todos los clientes.',
+                'PREG_05_05' => 'Nuestros ADOCKERS ofrecen encontrar la talla que el cliente pide y si no hay talla, ofrecen alternativas.',
+                'PREG_05_06' => 'Nuestros ADOCKERS ofrecen medir el pie de los niños.',
+                'PREG_05_07' => 'Se ofrecen diferentes zapatos para que ajuste el pie correctamente cuando hay niños.',
+                'PREG_05_08' => 'Nuestros ADOCKERS elogian a los clientes por su elección de producto.',
+                'PREG_05_09' => 'Nuestros clientes son atendidos rápidamente en caja.',
+                'PREG_05_10' => '¿Han realizado los cursos de Academia ADOC?',
+                'PREG_05_11' => '¿Adockers hacen uso de la APP ADOCKY cuando atienden a los clientes en el piso de venta?',
+                'PREG_05_12' => 'Adockers hacen uso de la APP ADOCKY para realizar la representación de inventario.',
             ],
             'kpis' => [
-                'PREG_05_01' => 'Venta',
-                'PREG_05_02' => 'Margen',
-                'PREG_05_03' => 'Conversión',
-                'PREG_05_04' => 'UPT',
-                'PREG_05_05' => 'DPT',
-                'PREG_05_06' => 'NPS',
+                'PREG_06_01' => 'Venta',
+                'PREG_06_02' => 'Margen',
+                'PREG_06_03' => 'Conversión',
+                'PREG_06_04' => 'UPT',
+                'PREG_06_05' => 'DPT',
+                'PREG_06_06' => 'NPS',
             ]
         ];
         // Aplanar si necesitás acceder por código directamente sin saber la sección

@@ -22,46 +22,33 @@ class DashboardController extends Controller
      */
     public function index(Request $request)
     {
+        set_time_limit(120);
+        ini_set('max_execution_time', 120);
         try {
             // Obtener filtros de la sesión o request
             $filtros = $this->obtenerFiltros($request);
-            
+
             // Obtener estadísticas generales (con filtros de país aplicados)
             $user = session('admin_user');
-            // Obtener estadísticas generales
             $estadisticas = $this->usuario->getEstadisticasVisitas($filtros, $user);
-            
-            // Obtener visitas paginadas
-            $page = $request->get('page', 1);
-            $perPage = config('admin.pagination.per_page', 20);
-            $visitas = $this->usuario->getVisitasPaginadas($filtros, $page, $perPage, $user);
-            // Agregar conteo de imágenes a cada visita
-            /*foreach ($visitas as &$visita) {
-                $imagenes = $this->usuario->getImagenesVisita($visita['id'], $user['rol'] ?? null, $user['email'] ?? null);
-                $visita['imagenes'] = $imagenes;
-                $visita['total_imagenes'] = is_countable($imagenes) ? count($imagenes) : 0;
-            }
-            unset($visita);*/
-            $totalVisitas = $this->usuario->contarVisitas($filtros, $user);
-            $totalPages = ceil($totalVisitas / $perPage);
-            
-            // Obtener datos para filtros (filtrados según permisos del usuario)
-            $user = session('admin_user');
-            $paises = $this->usuario->getPaisesDisponibles($user);
-            $evaluadores = $this->usuario->getEvaluadoresDisponibles();
-            
-            // Preparar datos de paginación
+
+            // La tabla de visitas se carga vía AJAX — sólo necesitamos stats y filtros aquí
+            $totalVisitas = (int) ($estadisticas['total_visitas'] ?? 0);
+            $perPage = (int) $request->get('per_page', config('admin.pagination.per_page', 20));
+            $page = (int) $request->get('page', 1);
             $paginacion = [
                 'current_page' => $page,
-                'per_page' => $perPage,
-                'total' => $totalVisitas,
-                'total_pages' => $totalPages,
-                'has_more' => $page < $totalPages
+                'per_page'     => $perPage,
+                'total'        => $totalVisitas,
+                'total_pages'  => $perPage > 0 ? (int) ceil($totalVisitas / $perPage) : 1,
             ];
+
+            // Obtener datos para filtros (bien cacheados — 30 min)
+            $paises = $this->usuario->getPaisesDisponibles($user);
+            $evaluadores = $this->usuario->getEvaluadoresDisponibles();
 
             return view('admin.dashboard.index', compact(
                 'estadisticas',
-                'visitas', 
                 'paginacion',
                 'filtros',
                 'paises',
@@ -70,15 +57,14 @@ class DashboardController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Error en dashboard: ' . $e->getMessage());
-            
+
             return view('admin.dashboard.index', [
                 'estadisticas' => [],
-                'visitas' => [],
-                'paginacion' => ['current_page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 0],
-                'filtros' => [],
-                'paises' => [],
-                'evaluadores' => [],
-                'error' => 'Error al cargar los datos. Intente nuevamente.'
+                'paginacion'   => ['current_page' => 1, 'per_page' => 20, 'total' => 0, 'total_pages' => 0],
+                'filtros'      => [],
+                'paises'       => [],
+                'evaluadores'  => [],
+                'error'        => 'Error al cargar los datos. Intente nuevamente.'
             ]);
         }
     }
@@ -88,6 +74,8 @@ class DashboardController extends Controller
      */
     public function getVisitas(Request $request)
     {
+        set_time_limit(120);
+        ini_set('max_execution_time', 120);
         try {
             $user = session('admin_user');
             $filtros = $this->obtenerFiltros($request, $user);

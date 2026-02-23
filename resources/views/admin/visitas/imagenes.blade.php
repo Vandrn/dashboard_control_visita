@@ -33,15 +33,6 @@
         </div>
     </div>
 
-    @php
-    $preguntasConImagen = [
-    1 => [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22],
-    3 => [1, 2, 5, 6, 7, 8, 9],
-    4 => [1, 10],
-    5 => []
-    ];
-    @endphp
-
     @if($imagenesAgrupadas->isNotEmpty())
     @foreach($imagenesAgrupadas as $bloque)
     <div class="mb-8">
@@ -50,18 +41,10 @@
         @foreach($bloque['preguntas'] as $pregunta)
         @php
         $codigoPreguntaRaw = $pregunta['codigo_pregunta'] ?? '';
-        $partes = explode('_', $codigoPreguntaRaw);
-        $codigoSeccion = isset($partes[1]) ? (int) ltrim($partes[1], '0') : 0;
-        $codigoPregunta = isset($partes[2]) ? (int) ltrim($partes[2], characters: '0') : 0;
-
         $esObservacion = \Illuminate\Support\Str::startsWith($codigoPreguntaRaw, 'OBS');
-
-        $mostrar = false;
-        if ($esObservacion) {
-        $mostrar = !empty($pregunta['observaciones']) || (isset($pregunta['imagenes']) && count($pregunta['imagenes']) > 0);
-        } elseif (isset($preguntasConImagen[$codigoSeccion]) && in_array($codigoPregunta, $preguntasConImagen[$codigoSeccion])) {
-        $mostrar = true;
-        }
+        $tieneImagenes = isset($pregunta['imagenes']) && is_array($pregunta['imagenes']) && count($pregunta['imagenes']) > 0;
+        $tieneObservacion = !empty($pregunta['observaciones']);
+        $mostrar = $tieneImagenes || ($esObservacion && $tieneObservacion);
         @endphp
 
         @if ($mostrar)
