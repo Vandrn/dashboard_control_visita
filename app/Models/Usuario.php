@@ -472,7 +472,16 @@ class Usuario
             $results = $this->bigQuery->runQuery($queryJobConfig);
 
             foreach ($results->rows() as $row) {
-                return (array) $row;
+                $data = (array) $row;
+
+                // Convertir KPIs a array si existe
+                if (isset($data['kpis']) && $data['kpis'] !== null) {
+                    $data['kpis'] = (array) $data['kpis'];
+                } else {
+                    $data['kpis'] = [];
+                }
+
+                return $data;
             }
 
             return null;

@@ -39,8 +39,42 @@ class VisitaController extends Controller
                 abort(404, 'Visita no encontrada o sin permisos para verla.');
             }
 
-            // Obtener KPIs de la visita
+            // Obtener KPIs de la visita (extraer de secciones si no existen como columna separada)
             $kpis = $visitaRaw['kpis'] ?? [];
+
+            // Convertir KPIs a array de arrays si vienen como objetos
+            $kpisArray = [];
+            if (is_array($kpis)) {
+                foreach ($kpis as $kpi) {
+                    $kpiData = (array) $kpi;
+                    // Normalizar código a mayúscula
+                    if (isset($kpiData['codigo_pregunta'])) {
+                        $kpiData['codigo_pregunta'] = strtoupper($kpiData['codigo_pregunta']);
+                    }
+                    $kpisArray[] = $kpiData;
+                }
+                $kpis = $kpisArray;
+            }
+
+            // Si no hay KPIs en columna separada, extraerlos de secciones (PREG_06_XX)
+            if (empty($kpis) && isset($visitaRaw['secciones'])) {
+                $kpis = [];
+                foreach ($visitaRaw['secciones'] as $seccion) {
+                    foreach ($seccion['preguntas'] as $pregunta) {
+                        $codigo = strtoupper($pregunta['codigo_pregunta'] ?? '');
+                        if (str_starts_with($codigo, 'PREG_06_')) {
+                            $kpis[] = [
+                                'codigo_pregunta' => $codigo,
+                                'valor' => $pregunta['respuesta'] ?? $pregunta['valor'] ?? null,
+                                'variacion' => $pregunta['variacion'] ?? null,
+                                'observaciones' => $pregunta['observaciones'] ?? null
+                            ];
+                        }
+                    }
+                }
+            }
+
+            Log::info('KPIs extraídos para visita ' . $id . ': ' . count($kpis) . ' KPIs');
 
             // VALIDACIÓN DE ACCESO POR PAÍS
             if (!$this->validarAccesoPais($visitaRaw, $user)) {
