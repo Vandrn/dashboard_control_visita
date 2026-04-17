@@ -22,7 +22,6 @@ class Usuario
     {
         $this->bigQuery = new BigQueryClient([
             'projectId' => config('admin.bigquery.project_id'),
-            'keyFilePath' => storage_path('app' . config('admin.bigquery.key_file')),
         ]);
 
         $this->visitasTable = 'GR_nuevo';

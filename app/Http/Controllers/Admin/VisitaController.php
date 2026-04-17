@@ -156,7 +156,6 @@ class VisitaController extends Controller
             // Inicializar Google Cloud Storage
             $storage = new StorageClient([
                 'projectId' => env('BIGQUERY_PROJECT_ID', 'adoc-bi-dev'),
-                'keyFilePath' => storage_path('app' . env('BIGQUERY_KEY_FILE', '/claves/adoc-bi-dev-debcb06854ae.json'))
             ]);
             $bucketName = env('GOOGLE_CLOUD_STORAGE_BUCKET', 'adoc-bi-dev-control-visitas-lz');
             $bucket = $storage->bucket($bucketName);
@@ -422,7 +421,7 @@ class VisitaController extends Controller
 
         return false;
     }
-    
+
         /**
      * Mostrar detalle de una sección específica de la visita
      */
