@@ -4,7 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Vite;
-
+use Illuminate\Support\Facades\URL;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,15 +19,12 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-public function boot()
-{
-    if (app()->environment('production')) {
-        $manifestPath = base_path('../public_html/build/manifest.json');
-        app()->bind('vite.manifest.path', function () use ($manifestPath) {
-            return $manifestPath;
-        });
+    public function boot()
+    {
+        if (app()->environment('production')) {
+            URL::forceRootUrl(config('app.url'));
+            URL::forceScheme('https');
+        }
     }
-}
-
 }
 

@@ -1,3 +1,12 @@
+FROM node:20 AS frontend
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+
+
 FROM php:8.2-apache
 
 RUN apt-get update && apt-get install -y \
@@ -17,10 +26,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /var/www/html
 
 COPY . /var/www/html
-
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 RUN composer install --no-dev --optimize-autoloader
+
+COPY --from=frontend /app/public/build /var/www/html/public/build
 
 RUN mkdir -p \
     /var/www/html/storage/framework/cache/data \
